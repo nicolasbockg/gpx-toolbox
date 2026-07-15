@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPX Toolbox</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 16px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: #e94560; }
+
+    .upload-btn {
+      padding: 6px 14px;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .upload-btn:hover { background: #c73652; }
+    #file-input { display: none; }
+
+    .stats { display: flex; gap: 16px; margin-left: auto; font-size: 12px; color: #aaa; }
+    .stats span { color: #e0e0e0; font-weight: 500; }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+    #map { flex: 1; }
+
+    .sidebar {
+      width: 290px;
+      background: #16213e;
+      border-left: 1px solid #0f3460;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 12px 14px;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+    }
+    .sidebar-section h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 13px;
+      text-align: center;
+      padding: 24px;
+      gap: 8px;
+    }
+    .empty-state svg { opacity: 0.3; }
+
+    /* Buttons */
+    .btn {
+      padding: 7px 10px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary  { background: #e94560; color: white; }
+    .btn-primary:not(:disabled):hover  { background: #c73652; }
+    .btn-secondary{ background: #0f3460; color: #ccc; }
+    .btn-secondary:not(:disabled):hover{ background: #1a4a80; }
+    .btn-danger   { background: #8b0000; color: #ffaaaa; }
+    .btn-danger:not(:disabled):hover   { background: #a00000; }
+    .btn-purple   { background: #5c2d91; color: #d9a4ff; }
+    .btn-purple:not(:disabled):hover   { background: #7b3fc0; }
+    .btn-row { display: flex; gap: 6px; margin-top: 8px; }
+    .btn-row .btn { flex: 1; }
+
+    /* Range crop */
+    .range-group { display: flex; flex-direction: column; gap: 8px; }
+    .range-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .range-row label { width: 36px; color: #aaa; }
+    .range-row input[type=range] { flex: 1; accent-color: #e94560; }
+    .range-row .val { width: 36px; text-align: right; font-size: 11px; color: #ccc; }
+
+    /* Edit mode */
+    .mode-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .mode-btn {
+      flex: 1; padding: 5px; font-size: 11px;
+      border: 1px solid #0f3460; border-radius: 4px;
+      background: #0d1b30; color: #aaa; cursor: pointer;
+    }
+    .mode-btn.active { background: #e94560; border-color: #e94560; color: white; }
+
+    .hint { font-size: 11px; color: #666; margin-top: 4px; }
+
+    .badge {
+      display: inline-block; padding: 1px 6px; border-radius: 10px;
+      font-size: 10px; margin-left: 6px; background: #e94560; color: white;
+      vertical-align: middle;
+    }
+    .badge.purple { background: #7b3fc0; }
+    .badge.orange { background: #c07020; }
+
+    /* Chart */
+    .chart-container { padding: 12px 14px; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+    .chart-container h2 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #888; margin-bottom: 6px;
+    }
+    canvas#elevChart {
+      width: 100%; height: 72px; display: block;
+      border-radius: 4px; background: #0d1b30;
+    }
+
+    /* Gap section */
+    .gap-empty { font-size: 12px; color: #444; }
+
+    .gap-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 6px 0; border-bottom: 1px solid #0d1b30; font-size: 12px;
+    }
+    .gap-item:last-child { border-bottom: none; }
+    .gap-info { flex: 1; line-height: 1.5; }
+    .gap-info strong { color: #e0e0e0; }
+    .gap-info .sub { font-size: 10px; color: #666; }
+    .gap-item.filled .gap-info strong { color: #4caf50; }
+    .gap-item.active-fill { background: #1a2a40; margin: 0 -14px; padding: 6px 14px; }
+
+    .gap-fill-panel { padding-top: 10px; }
+    .field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .field-row label { font-size: 11px; color: #aaa; white-space: nowrap; }
+    select.profile-select {
+      flex: 1; padding: 5px 8px; background: #0d1b30; border: 1px solid #0f3460;
+      border-radius: 4px; color: #e0e0e0; font-size: 12px;
+    }
+
+    .wp-list { margin: 6px 0; }
+    .wp-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: #aaa; padding: 3px 0;
+    }
+    .wp-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #7b3fc0; color: white; font-size: 9px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .wp-coords { flex: 1; }
+    .wp-remove {
+      background: none; border: none; color: #555; cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 0 2px;
+    }
+    .wp-remove:hover { color: #e94560; }
+
+    .route-info {
+      font-size: 11px; color: #aaa; margin: 6px 0; padding: 6px 8px;
+      background: #0d1b30; border-radius: 4px; line-height: 1.6;
+    }
+    .route-info .ok { color: #4caf50; }
+    .route-info .err { color: #e94560; }
+
+    /* Point list */
+    .point-list { flex: 1; overflow-y: auto; font-size: 11px; }
+    .point-list::-webkit-scrollbar { width: 4px; }
+    .point-list::-webkit-scrollbar-track { background: #16213e; }
+    .point-list::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+
+    .point-item {
+      display: flex; align-items: center;
+      padding: 5px 14px; border-bottom: 1px solid #0d1b30;
+      cursor: pointer; transition: background 0.1s;
+    }
+    .point-item:hover { background: #1e2f50; }
+    .point-item.removed { opacity: 0.35; text-decoration: line-through; }
+    .point-item.cropped-out { opacity: 0.2; }
+    .point-item.highlighted { background: #2a1f3d; }
+    .point-item.synthetic .point-index { color: #7b3fc0; }
+
+    .point-index { width: 32px; color: #555; flex-shrink: 0; }
+    .point-coords { flex: 1; color: #ccc; }
+    .point-time { color: #666; font-size: 10px; white-space: nowrap; margin-left: 4px; }
+
+    .remove-dot {
+      width: 16px; height: 16px; border-radius: 50%; border: 1px solid #444;
+      background: transparent; cursor: pointer; flex-shrink: 0; margin-left: 4px;
+      display: flex; align-items: center; justify-content: center;
+      color: #666; font-size: 10px; line-height: 1;
+    }
+    .remove-dot:hover { border-color: #e94560; color: #e94560; background: #2a0a15; }
+    .point-item.removed .remove-dot { border-color: #2a6; color: #2a6; }
+    .point-item.removed .remove-dot:hover { background: #0a2010; }
+
+    /* ── Bottom chart panel ── */
+    .chart-panel {
+      flex-shrink: 0;
+      background: #16213e;
+      border-top: 1px solid #0f3460;
+      display: none;
+      flex-direction: column;
+      height: 220px;
+    }
+    .chart-panel.open { display: flex; }
+
+    .chart-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+    }
+    .chart-toolbar span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: #888; }
+
+    .chart-toggle-btn {
+      padding: 3px 10px;
+      font-size: 11px;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      background: #0d1b30;
+      color: #aaa;
+      cursor: pointer;
+    }
+    .chart-toggle-btn.active { background: #e94560; border-color: #e94560; color: white; }
+
+    .chart-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #speedChart {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+    .chart-tooltip {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,20,40,0.92);
+      border: 1px solid #0f3460;
+      border-radius: 5px;
+      padding: 5px 12px;
+      font-size: 11px;
+      color: #e0e0e0;
+      pointer-events: none;
+      white-space: nowrap;
+      display: none;
+      gap: 16px;
+    }
+    .chart-tooltip.visible { display: flex; }
+    .chart-tooltip .tv { font-weight: 600; }
+    .chart-tooltip .tl { color: #888; margin-right: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>GPX Toolbox</h1>
+  <button class="upload-btn" onclick="document.getElementById('file-input').click()">Upload GPX</button>
+  <input type="file" id="file-input" accept=".gpx" />
+  <button class="upload-btn" id="stitch-btn" style="display:none;background:#5c2d91"
+    onclick="document.getElementById('stitch-input').click()">Stitch activity…</button>
+  <input type="file" id="stitch-input" accept=".gpx" style="display:none" />
+  <div class="stats" id="stats" style="display:none">
+    <div>Points: <span id="stat-total">0</span></div>
+    <div>Active: <span id="stat-active">0</span></div>
+    <div>Distance: <span id="stat-dist">0 km</span></div>
+  </div>
+  <button class="btn btn-primary" id="export-btn"
+    style="margin-left:auto;display:none" onclick="exportGpx()">Export GPX</button>
+  <button class="upload-btn" id="chart-btn" style="display:none;background:#0f3460"
+    onclick="toggleChartPanel()">Chart ▲</button>
+</header>
+
+<div class="main">
+  <div id="map"></div>
+
+  <div class="sidebar">
+    <div id="empty-state" class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+        <circle cx="12" cy="9" r="2.5"/>
+      </svg>
+      <div>Upload a GPX file to get started</div>
+    </div>
+
+    <div id="controls" style="display:none;overflow-y:auto;flex-shrink:0;max-height:calc(100vh - 52px - 200px)">
+
+      <!-- Elevation chart -->
+      <div class="chart-container">
+        <h2>Elevation</h2>
+        <canvas id="elevChart"></canvas>
+      </div>
+
+      <!-- Crop -->
+      <div class="sidebar-section">
+        <h2>Crop Activity</h2>
+        <div class="range-group">
+          <div class="range-row">
+            <label>Start</label>
+            <input type="range" id="crop-start" min="0" max="100" value="0" oninput="onCropChange()" />
+            <span class="val" id="crop-start-val">0%</span>
+          </div>
+          <div class="range-row">
+            <label>End</label>
+            <input type="range" id="crop-end" min="0" max="100" value="100" oninput="onCropChange()" />
+            <span class="val" id="crop-end-val">100%</span>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="resetCrop()">Reset</button>
+        </div>
+      </div>
+
+      <!-- Gaps -->
+      <div class="sidebar-section" id="gaps-section">
+        <h2>Route Gaps
+          <span class="badge orange" id="gap-badge" style="display:none">0</span>
+          <span class="badge purple" id="gap-filled-badge" style="display:none">0 filled</span>
+        </h2>
+        <div id="gap-list"><p class="gap-empty">No gaps detected.</p></div>
+      </div>
+
+      <!-- Timestamps -->
+      <div class="sidebar-section" id="ts-section" style="display:none">
+        <h2>Timestamps</h2>
+        <div class="field-row">
+          <label style="font-size:11px;color:#aaa;white-space:nowrap">Date</label>
+          <input type="date" id="ts-date"
+            style="flex:1;padding:5px 8px;background:#0d1b30;border:1px solid #0f3460;
+                   border-radius:4px;color:#e0e0e0;font-size:12px;" />
+        </div>
+        <p class="hint" id="ts-hint"></p>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="applyDateChange()">Apply to all</button>
+        </div>
+      </div>
+
+      <!-- Edit points -->
+      <div class="sidebar-section">
+        <h2>Edit Points <span class="badge" id="removed-badge" style="display:none">0 removed</span></h2>
+        <div class="mode-row">
+          <button class="mode-btn active" id="mode-pan" onclick="setMode('pan')">Pan</button>
+          <button class="mode-btn" id="mode-delete" onclick="setMode('delete')">Delete</button>
+        </div>
+        <p class="hint" id="mode-hint">Switch to Delete, then click points to remove them.</p>
+        <div class="btn-row">
+          <button class="btn btn-danger" id="undo-btn" onclick="undoLast()" disabled>Undo Last</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Point list -->
+    <div class="point-list" id="point-list"></div>
+  </div>
+</div>
+
+<!-- Bottom chart panel -->
+<div class="chart-panel" id="chart-panel">
+  <div class="chart-toolbar">
+    <span>Speed &amp; Elevation</span>
+    <button class="chart-toggle-btn active" id="btn-speed" onclick="setChartMetric('speed')">Speed</button>
+    <button class="chart-toggle-btn" id="btn-pace" onclick="setChartMetric('pace')">Pace</button>
+    <span id="chart-units" style="margin-left:4px;font-size:11px;color:#555"></span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="speedChart"></canvas>
+    <div class="chart-tooltip" id="chart-tooltip">
+      <span><span class="tl">dist</span><span class="tv" id="tt-dist"></span></span>
+      <span><span class="tl" id="tt-speed-lbl"></span><span class="tv" id="tt-speed"></span></span>
+      <span><span class="tl">elev</span><span class="tv" id="tt-ele"></span></span>
+      <span><span class="tl">time</span><span class="tv" id="tt-time"></span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let allPoints = [];
+let cropStart = 0, cropEnd = 0;
+let mode = 'pan';
+let removeHistory = [];
+let markers = [];
+
+// Gap state
+let gaps = [];          // [{startIdx, endIdx, distM, timeGapS, filled}]
+let selectedGapIdx = -1;
+let gapWaypoints = [];  // [{lat, lng}] for the gap being filled
+let gapWpMarkers = [];  // Leaflet markers for waypoints
+let pendingRoute = null; // {coords[[lon,lat]], duration, distance} from OSRM
+
+// ── Map + layer ordering ─────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([20, 0], 2);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// Layers added in z-order (bottom → top)
+const layers = {
+  dim:        L.layerGroup().addTo(map), // grey full track
+  gapHL:      L.layerGroup().addTo(map), // orange gap indicators
+  active:     L.layerGroup().addTo(map), // red active segments
+  preview:    L.layerGroup().addTo(map), // purple dashed preview route
+  waypoints:  L.layerGroup().addTo(map), // purple waypoint pins
+  dots:       L.layerGroup().addTo(map), // track point dots
+};
+
+// ── File input ───────────────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => loadGpx(ev.target.result);
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+document.getElementById('stitch-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => stitchGpx(ev.target.result);
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// Top-level GPX metadata preserved for export
+let gpxMeta = {
+  creator:     'GPX Toolbox',
+  namespaces:  '',   // extra xmlns attrs from original <gpx>
+  metadata:    '',   // raw <metadata>...</metadata> block
+  trkName:     '',   // <trk><name>
+  trkType:     '',   // <trk><type>
+  trkExtras:   '',   // any other child elements of <trk> (except trkseg)
+};
+
+function loadGpx(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const trkpts = doc.querySelectorAll('trkpt');
+  if (!trkpts.length) { alert('No track points found in this GPX file.'); return; }
+
+  // ── Preserve top-level metadata ───────────────────────────────────────────
+  const gpxEl = doc.querySelector('gpx');
+  gpxMeta.creator = gpxEl?.getAttribute('creator') || 'GPX Toolbox';
+
+  // Collect all xmlns:* and xsi:* attributes for round-trip fidelity
+  const nsAttrs = [];
+  if (gpxEl) {
+    for (const attr of gpxEl.attributes) {
+      if (attr.name !== 'version' && attr.name !== 'creator') nsAttrs.push(`${attr.name}="${attr.value}"`);
+    }
+  }
+  gpxMeta.namespaces = nsAttrs.join(' ');
+
+  const metaEl = doc.querySelector('gpx > metadata');
+  gpxMeta.metadata = metaEl ? metaEl.outerHTML : '';
+
+  const trkEl = doc.querySelector('trk');
+  gpxMeta.trkName   = doc.querySelector('trk > name')?.textContent ?? '';
+  gpxMeta.trkType   = doc.querySelector('trk > type')?.textContent ?? '';
+
+  // Preserve any other <trk> children that aren't <name>/<type>/<trkseg>
+  const skipTags = new Set(['name', 'type', 'trkseg']);
+  gpxMeta.trkExtras = trkEl
+    ? Array.from(trkEl.children)
+        .filter(c => !skipTags.has(c.localName))
+        .map(c => '    ' + c.outerHTML)
+        .join('\n')
+    : '';
+
+  allPoints = Array.from(trkpts).map(pt => ({
+    lat:       parseFloat(pt.getAttribute('lat')),
+    lon:       parseFloat(pt.getAttribute('lon')),
+    ele:       parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN'),
+    time:      pt.querySelector('time')?.textContent ?? null,
+    removed:   false,
+    synthetic: false,
+    // Store serialised inner XML for full round-trip (ele+time+extensions+etc.)
+    // Strip redundant xmlns attributes the browser serializer injects on child elements
+    innerXml:  pt.innerHTML.replace(/ xmlns="[^"]*"/g, ''),
+  }));
+
+  cropStart = 0;
+  cropEnd = allPoints.length - 1;
+  removeHistory = [];
+  selectedGapIdx = -1;
+  gapWaypoints = [];
+  pendingRoute = null;
+
+  document.getElementById('crop-start').max = allPoints.length - 1;
+  document.getElementById('crop-end').max   = allPoints.length - 1;
+  document.getElementById('crop-start').value = 0;
+  document.getElementById('crop-end').value   = allPoints.length - 1;
+  document.getElementById('crop-start-val').textContent = '0%';
+  document.getElementById('crop-end-val').textContent   = '100%';
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('controls').style.display    = '';
+  document.getElementById('stats').style.display       = '';
+  document.getElementById('export-btn').style.display  = '';
+  document.getElementById('stitch-btn').style.display  = '';
+  document.getElementById('chart-btn').style.display   = '';
+
+  detectGaps();
+  initTrack();
+  renderPointList();
+  renderGapList();
+  renderGapHighlights();
+  drawElevChart();
+  updateStats();
+  updateRemovedBadge();
+  initTsSection();
+
+  map.fitBounds(L.latLngBounds(allPoints.map(p => [p.lat, p.lon])), { padding: [24, 24] });
+}
+
+// ── Stitch a second GPX into the current track ───────────────────────────────
+function stitchGpx(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const trkpts = doc.querySelectorAll('trkpt');
+  if (!trkpts.length) { alert('No track points found in the second GPX file.'); return; }
+
+  const newPoints = Array.from(trkpts).map(pt => ({
+    lat:       parseFloat(pt.getAttribute('lat')),
+    lon:       parseFloat(pt.getAttribute('lon')),
+    ele:       parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN'),
+    time:      pt.querySelector('time')?.textContent ?? null,
+    removed:   false,
+    synthetic: false,
+    innerXml:  pt.innerHTML.replace(/ xmlns="[^"]*"/g, ''),
+  }));
+
+  // Determine merge order from timestamps if both tracks have them
+  const existingStart = allPoints.find(p => p.time)?.time;
+  const newStart      = newPoints.find(p => p.time)?.time;
+
+  let merged;
+  if (existingStart && newStart) {
+    // Sort by timestamp: put whichever starts earlier first
+    if (new Date(newStart) < new Date(existingStart)) {
+      merged = [...newPoints, ...allPoints];
+    } else {
+      merged = [...allPoints, ...newPoints];
+    }
+  } else {
+    // No timestamps: append second file after first
+    merged = [...allPoints, ...newPoints];
+  }
+
+  allPoints = merged;
+  cropStart = 0;
+  cropEnd   = allPoints.length - 1;
+  removeHistory = [];
+  selectedGapIdx = -1;
+  gapWaypoints   = [];
+  pendingRoute   = null;
+
+  document.getElementById('crop-start').max   = allPoints.length - 1;
+  document.getElementById('crop-end').max     = allPoints.length - 1;
+  document.getElementById('crop-start').value = 0;
+  document.getElementById('crop-end').value   = allPoints.length - 1;
+  document.getElementById('crop-start-val').textContent = '0%';
+  document.getElementById('crop-end-val').textContent   = '100%';
+
+  detectGaps();
+  initTrack();
+  renderPointList();
+  renderGapList();
+  renderGapHighlights();
+  drawElevChart();
+  updateStats();
+  updateRemovedBadge();
+  initTsSection();
+
+  map.fitBounds(L.latLngBounds(allPoints.map(p => [p.lat, p.lon])), { padding: [24, 24] });
+}
+
+// ── initTrack: create markers once per load ──────────────────────────────────
+function initTrack() {
+  layers.dim.clearLayers();
+  layers.dots.clearLayers();
+  markers = [];
+
+  layers.dim.addLayer(
+    L.polyline(allPoints.map(p => [p.lat, p.lon]), { color: '#333', weight: 2, opacity: 0.4 })
+  );
+
+  for (let i = 0; i < allPoints.length; i++) {
+    const p = allPoints[i];
+    const dot = L.circleMarker([p.lat, p.lon], markerStyle(i));
+
+    dot.on('click', e => {
+      L.DomEvent.stopPropagation(e);
+      if (mode === 'delete') {
+        doToggleRemove(i);
+      } else {
+        scrollToPoint(i);
+        highlightPoint(i);
+      }
+    });
+
+    dot.bindTooltip(
+      `#${i + 1} · ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}` +
+      (isNaN(p.ele) ? '' : ` · ${Math.round(p.ele)}m`) +
+      (p.synthetic ? ' · synthetic' : ''),
+      { sticky: true }
+    );
+
+    layers.dots.addLayer(dot);
+    markers.push(dot);
+  }
+
+  updateActiveSegments();
+}
+
+function updateMapStyles() {
+  for (let i = 0; i < markers.length; i++) markers[i].setStyle(markerStyle(i));
+  updateActiveSegments();
+}
+
+function updateActiveSegments() {
+  layers.active.clearLayers();
+  let seg = [];
+  for (let i = 0; i < allPoints.length; i++) {
+    const p = allPoints[i];
+    if (!p.removed && i >= cropStart && i <= cropEnd) {
+      seg.push([p.lat, p.lon]);
+    } else {
+      if (seg.length > 1) layers.active.addLayer(L.polyline(seg, { color: '#e94560', weight: 3, opacity: 0.9 }));
+      seg = [];
+    }
+  }
+  if (seg.length > 1) layers.active.addLayer(L.polyline(seg, { color: '#e94560', weight: 3, opacity: 0.9 }));
+}
+
+function markerStyle(i) {
+  const p = allPoints[i];
+  const inCrop  = i >= cropStart && i <= cropEnd;
+  const isActive = !p.removed && inCrop;
+
+  if (p.synthetic && isActive) {
+    return { radius: 3, color: '#b44bff', fillColor: '#b44bff', fillOpacity: 0.8, weight: 1 };
+  }
+  if (p.removed) {
+    return { radius: 2, color: '#e94560', fillColor: '#8b0000', fillOpacity: 0.5, weight: 1.5 };
+  }
+  if (!inCrop) {
+    return { radius: 2, color: '#444', fillColor: '#222', fillOpacity: 0.4, weight: 1 };
+  }
+  return { radius: 4, color: '#fff', fillColor: '#e94560', fillOpacity: 0.9, weight: 1 };
+}
+
+// ── Crop ─────────────────────────────────────────────────────────────────────
+function onCropChange() {
+  let s = parseInt(document.getElementById('crop-start').value);
+  let e = parseInt(document.getElementById('crop-end').value);
+  if (s > e) { s = e; document.getElementById('crop-start').value = s; }
+  cropStart = s; cropEnd = e;
+
+  const pct = n => Math.round((n / (allPoints.length - 1)) * 100);
+  document.getElementById('crop-start-val').textContent = pct(s) + '%';
+  document.getElementById('crop-end-val').textContent   = pct(e) + '%';
+
+  updateMapStyles();
+  updatePointListClasses();
+  drawElevChart();
+  updateStats();
+}
+
+function resetCrop() {
+  cropStart = 0; cropEnd = allPoints.length - 1;
+  document.getElementById('crop-start').value = 0;
+  document.getElementById('crop-end').value   = allPoints.length - 1;
+  document.getElementById('crop-start-val').textContent = '0%';
+  document.getElementById('crop-end-val').textContent   = '100%';
+  updateMapStyles();
+  updatePointListClasses();
+  drawElevChart();
+  updateStats();
+}
+
+// ── Mode ─────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-pan').classList.toggle('active', m === 'pan');
+  document.getElementById('mode-delete').classList.toggle('active', m === 'delete');
+  document.getElementById('mode-hint').textContent =
+    m === 'delete' ? 'Click a point on the map or list to remove it.'
+                   : 'Switch to Delete to remove points.';
+  map.dragging[m === 'delete' ? 'disable' : 'enable']();
+  if (!gapFillActive()) map.getContainer().style.cursor = m === 'delete' ? 'crosshair' : '';
+}
+
+// ── Remove / Undo ─────────────────────────────────────────────────────────────
+function doToggleRemove(idx) {
+  allPoints[idx].removed = !allPoints[idx].removed;
+  if (allPoints[idx].removed) removeHistory.push(idx);
+  else removeHistory = removeHistory.filter(i => i !== idx);
+  updateMapStyles();
+  updatePointListClasses();
+  updateStats();
+  updateRemovedBadge();
+}
+
+function undoLast() {
+  if (!removeHistory.length) return;
+  allPoints[removeHistory.pop()].removed = false;
+  updateMapStyles();
+  updatePointListClasses();
+  updateStats();
+  updateRemovedBadge();
+}
+
+function updateRemovedBadge() {
+  const n = allPoints.filter(p => p.removed).length;
+  const b = document.getElementById('removed-badge');
+  b.style.display = n ? '' : 'none';
+  b.textContent = n + ' removed';
+  document.getElementById('undo-btn').disabled = !removeHistory.length;
+}
+
+// ── Gap detection ─────────────────────────────────────────────────────────────
+function detectGaps() {
+  gaps = [];
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    const a = allPoints[i], b = allPoints[i + 1];
+    const distM = haversine(a.lat, a.lon, b.lat, b.lon) * 1000;
+    let isGap = false;
+    let timeGapS = null;
+
+    if (a.time && b.time) {
+      timeGapS = (new Date(b.time) - new Date(a.time)) / 1000;
+      // Gap: paused > 30s AND moved > 150m (rules out stationary stops)
+      isGap = timeGapS > 30 && distM > 150;
+    } else {
+      // No timestamps: flag suspiciously large jumps
+      isGap = distM > 500;
+    }
+
+    if (isGap) gaps.push({ startIdx: i, endIdx: i + 1, distM: Math.round(distM), timeGapS, filled: false });
+  }
+}
+
+function renderGapHighlights() {
+  layers.gapHL.clearLayers();
+  for (const gap of gaps) {
+    const a = allPoints[gap.startIdx], b = allPoints[gap.endIdx];
+    const color = gap.filled ? '#4caf50' : '#e09020';
+    layers.gapHL.addLayer(
+      L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color, weight: 3, opacity: 0.8, dashArray: '8 6' })
+    );
+    layers.gapHL.addLayer(
+      L.circleMarker([a.lat, a.lon], { radius: 6, color, fillColor: color, fillOpacity: 0.7, weight: 2 })
+    );
+    layers.gapHL.addLayer(
+      L.circleMarker([b.lat, b.lon], { radius: 6, color, fillColor: color, fillOpacity: 0.7, weight: 2 })
+    );
+  }
+}
+
+function renderGapList() {
+  const list = document.getElementById('gap-list');
+  const unfilled = gaps.filter(g => !g.filled).length;
+  const filled   = gaps.filter(g =>  g.filled).length;
+
+  const badge = document.getElementById('gap-badge');
+  const filledBadge = document.getElementById('gap-filled-badge');
+  badge.style.display = unfilled ? '' : 'none';
+  badge.textContent = unfilled;
+  filledBadge.style.display = filled ? '' : 'none';
+  filledBadge.textContent = filled + ' filled';
+
+  if (!gaps.length) {
+    list.innerHTML = '<p class="gap-empty">No gaps detected.</p>';
+    return;
+  }
+
+  list.innerHTML = '';
+  gaps.forEach((gap, i) => {
+    const isSelected = i === selectedGapIdx;
+    const div = document.createElement('div');
+    div.className = 'gap-item' + (gap.filled ? ' filled' : '') + (isSelected ? ' active-fill' : '');
+
+    const distKm = (gap.distM / 1000).toFixed(2);
+    const timeStr = gap.timeGapS != null
+      ? (gap.timeGapS >= 60 ? Math.round(gap.timeGapS / 60) + ' min gap' : Math.round(gap.timeGapS) + 's gap')
+      : 'no timestamps';
+
+    div.innerHTML = `
+      <div class="gap-info">
+        <strong>Gap ${i + 1}: ${distKm} km</strong><br>
+        <span class="sub">${timeStr} · pts ${gap.startIdx + 1}–${gap.endIdx + 1}</span>
+      </div>
+      <button class="btn ${gap.filled ? 'btn-secondary' : 'btn-purple'}" style="font-size:11px;padding:4px 8px"
+        onclick="gaps[${i}].filled ? refillGap(${i}) : startFillGap(${i})">
+        ${gap.filled ? 'Re-fill' : 'Fill'}
+      </button>
+    `;
+
+    // Expand fill panel below this gap item when selected
+    if (isSelected) {
+      const panel = document.createElement('div');
+      panel.className = 'gap-fill-panel';
+      panel.id = 'gap-fill-panel';
+      panel.innerHTML = buildFillPanelHTML(i);
+      div.appendChild(panel);
+      renderWaypointList();
+    }
+
+    list.appendChild(div);
+  });
+}
+
+function buildFillPanelHTML(gapIdx) {
+  return `
+    <div class="field-row">
+      <label>Profile</label>
+      <select class="profile-select" id="gap-profile">
+        <option value="cycling">Cycling</option>
+        <option value="foot">Hiking / Walking</option>
+      </select>
+    </div>
+    <p class="hint">Click the map to add optional waypoints, then hit Route it.</p>
+    <div class="wp-list" id="wp-list"></div>
+    <div id="route-info"></div>
+    <div class="btn-row" id="fill-btn-row">
+      <button class="btn btn-purple" onclick="routeGap()">Route it</button>
+      <button class="btn btn-secondary" onclick="deselectGap()">Cancel</button>
+    </div>
+    <div id="pause-row" style="display:none">
+      <div class="field-row" style="margin-top:8px">
+        <label style="white-space:nowrap">Pause at start</label>
+        <input type="number" id="gap-pause" min="0" step="1"
+          style="flex:1;padding:5px 8px;background:#0d1b30;border:1px solid #0f3460;
+                 border-radius:4px;color:#e0e0e0;font-size:12px;width:60px" />
+        <span style="font-size:11px;color:#aaa;white-space:nowrap">min</span>
+      </div>
+      <p class="hint" id="pause-hint"></p>
+    </div>
+    <div class="btn-row" id="accept-btn-row" style="display:none">
+      <button class="btn btn-primary" onclick="acceptRoute()">Accept</button>
+      <button class="btn btn-secondary" onclick="clearPreview()">Re-route</button>
+      <button class="btn btn-secondary" onclick="deselectGap()">Cancel</button>
+    </div>
+  `;
+}
+
+// ── Gap fill workflow ─────────────────────────────────────────────────────────
+function gapFillActive() { return selectedGapIdx >= 0; }
+
+function startFillGap(i) {
+  if (selectedGapIdx === i) { deselectGap(); return; }
+  deselectGap();
+  selectedGapIdx = i;
+  gapWaypoints = [];
+  pendingRoute = null;
+  clearWpMarkers();
+  layers.preview.clearLayers();
+
+  // Pan map to the gap
+  const gap = gaps[i];
+  const a = allPoints[gap.startIdx], b = allPoints[gap.endIdx];
+  map.fitBounds([[a.lat, a.lon], [b.lat, b.lon]], { padding: [60, 60], maxZoom: 15 });
+
+  // Enable waypoint placement via map click
+  map.getContainer().style.cursor = 'crosshair';
+  map.dragging.enable();
+
+  renderGapList();
+}
+
+function refillGap(i) {
+  // Remove synthetic points that belong to this gap, then re-open fill panel
+  const gap = gaps[i];
+  // Count how many synthetic points were inserted after gap.startIdx before endIdx
+  // We'll just strip synthetic points in the gap range
+  let removed = 0;
+  let idx = gap.startIdx + 1;
+  while (idx < gap.endIdx) {
+    if (allPoints[idx].synthetic) {
+      allPoints.splice(idx, 1);
+      gap.endIdx--;
+      // Shift subsequent gap indices
+      for (let j = i + 1; j < gaps.length; j++) {
+        gaps[j].startIdx--;
+        gaps[j].endIdx--;
+      }
+      removed++;
+    } else {
+      idx++;
+    }
+  }
+  gap.filled = false;
+  if (removed) {
+    removeHistory = removeHistory.map(x => x > gap.startIdx ? x - removed : x).filter(x => x >= 0);
+    cropEnd = allPoints.length - 1;
+    document.getElementById('crop-end').max   = cropEnd;
+    document.getElementById('crop-end').value = cropEnd;
+    initTrack();
+    renderPointList();
+    drawElevChart();
+    updateStats();
+    renderGapHighlights();
+  }
+  startFillGap(i);
+}
+
+function deselectGap() {
+  selectedGapIdx = -1;
+  gapWaypoints = [];
+  pendingRoute = null;
+  clearWpMarkers();
+  layers.preview.clearLayers();
+  map.getContainer().style.cursor = mode === 'delete' ? 'crosshair' : '';
+  renderGapList();
+}
+
+// Map click → place waypoint when gap fill is active
+map.on('click', e => {
+  if (gapFillActive()) {
+    addGapWaypoint(e.latlng);
+  }
+});
+
+function addGapWaypoint(latlng) {
+  gapWaypoints.push(latlng);
+  const n = gapWaypoints.length;
+
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:22px;height:22px;border-radius:50%;
+      background:#7b3fc0;color:white;
+      font-size:11px;font-weight:bold;
+      display:flex;align-items:center;justify-content:center;
+      border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.5)
+    ">${n}</div>`,
+    iconSize: [22, 22], iconAnchor: [11, 11],
+  });
+
+  const marker = L.marker(latlng, { icon, draggable: true }).addTo(layers.waypoints);
+  marker.on('drag', () => {
+    const idx = gapWpMarkers.indexOf(marker);
+    if (idx >= 0) gapWaypoints[idx] = marker.getLatLng();
+  });
+  marker.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    const idx = gapWpMarkers.indexOf(marker);
+    if (idx >= 0) removeWaypoint(idx);
+  });
+  gapWpMarkers.push(marker);
+  renderWaypointList();
+  // Clear any existing preview when waypoints change
+  if (pendingRoute) { pendingRoute = null; layers.preview.clearLayers(); togglePreviewButtons(false); }
+}
+
+function removeWaypoint(idx) {
+  gapWaypoints.splice(idx, 1);
+  layers.waypoints.removeLayer(gapWpMarkers[idx]);
+  gapWpMarkers.splice(idx, 1);
+  // Re-number remaining markers
+  gapWpMarkers.forEach((m, i) => {
+    m.getElement().querySelector('div').textContent = i + 1;
+  });
+  renderWaypointList();
+  if (pendingRoute) { pendingRoute = null; layers.preview.clearLayers(); togglePreviewButtons(false); }
+}
+
+function clearWpMarkers() {
+  gapWpMarkers.forEach(m => layers.waypoints.removeLayer(m));
+  gapWpMarkers = [];
+}
+
+function renderWaypointList() {
+  const el = document.getElementById('wp-list');
+  if (!el) return;
+  if (!gapWaypoints.length) { el.innerHTML = '<p class="hint">No waypoints — routing direct.</p>'; return; }
+  el.innerHTML = '';
+  gapWaypoints.forEach((wp, i) => {
+    const div = document.createElement('div');
+    div.className = 'wp-item';
+    div.innerHTML = `
+      <span class="wp-dot">${i + 1}</span>
+      <span class="wp-coords">${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}</span>
+      <button class="wp-remove" onclick="removeWaypoint(${i})">×</button>
+    `;
+    el.appendChild(div);
+  });
+}
+
+async function routeGap() {
+  if (selectedGapIdx < 0) return;
+  const gap = gaps[selectedGapIdx];
+  const start = allPoints[gap.startIdx];
+  const end   = allPoints[gap.endIdx];
+  const profile = document.getElementById('gap-profile')?.value || 'cycling';
+
+  const coords = [
+    [start.lon, start.lat],
+    ...gapWaypoints.map(w => [w.lng, w.lat]),
+    [end.lon, end.lat],
+  ];
+
+  const coordStr = coords.map(c => c.join(',')).join(';');
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coordStr}?overview=full&geometries=geojson&steps=false`;
+
+  setRouteInfo('Routing…', false);
+  const routeBtn = document.querySelector('#fill-btn-row .btn-purple');
+  if (routeBtn) { routeBtn.textContent = 'Routing…'; routeBtn.disabled = true; }
+
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.code !== 'Ok' || !data.routes?.length) {
+      setRouteInfo('No route found. Try adding waypoints or switching to Hiking profile.', true);
+      resetRouteBtn();
+      return;
+    }
+
+    const route = data.routes[0];
+    pendingRoute = {
+      coords:   route.geometry.coordinates, // [[lon, lat], ...]
+      duration: route.duration,
+      distance: route.distance,
+    };
+
+    // Draw preview
+    layers.preview.clearLayers();
+    const previewLatLngs = pendingRoute.coords.map(c => [c[1], c[0]]);
+    layers.preview.addLayer(
+      L.polyline(previewLatLngs, { color: '#b44bff', weight: 3, opacity: 0.9, dashArray: '10 6' })
+    );
+
+    const distKm  = (route.distance / 1000).toFixed(2);
+    const travelMins = Math.round(route.duration / 60);
+    setRouteInfo(`Route: ${distKm} km · est. ${travelMins} min travel`, false);
+
+    // Populate pause field if we have a real time gap to work with
+    const gap     = gaps[selectedGapIdx];
+    const startMs = allPoints[gap.startIdx].time ? new Date(allPoints[gap.startIdx].time).getTime() : null;
+    const endMs   = allPoints[gap.endIdx].time   ? new Date(allPoints[gap.endIdx].time).getTime()   : null;
+    const pauseRow = document.getElementById('pause-row');
+
+    if (startMs && endMs) {
+      const totalMins  = (endMs - startMs) / 60000;
+      const pauseMins  = Math.max(0, Math.round(totalMins - travelMins));
+      document.getElementById('gap-pause').value = pauseMins;
+      document.getElementById('pause-hint').textContent =
+        `Total gap: ${Math.round(totalMins)} min · travel: ${travelMins} min`;
+      pauseRow.style.display = '';
+    } else {
+      pauseRow.style.display = 'none';
+    }
+
+    togglePreviewButtons(true);
+  } catch (err) {
+    setRouteInfo('Routing failed — check your connection.', true);
+  }
+  resetRouteBtn();
+}
+
+function setRouteInfo(msg, isErr) {
+  const el = document.getElementById('route-info');
+  if (!el) return;
+  el.innerHTML = `<div class="route-info ${isErr ? 'err' : 'ok'}">${msg}</div>`;
+}
+
+function togglePreviewButtons(showAccept) {
+  const fill   = document.getElementById('fill-btn-row');
+  const accept = document.getElementById('accept-btn-row');
+  const pause  = document.getElementById('pause-row');
+  if (fill)   fill.style.display   = showAccept ? 'none' : '';
+  if (accept) accept.style.display = showAccept ? '' : 'none';
+  // pause-row visibility is set by routeGap; hide it when going back to fill mode
+  if (!showAccept && pause) pause.style.display = 'none';
+}
+
+function resetRouteBtn() {
+  const btn = document.querySelector('#fill-btn-row .btn-purple');
+  if (btn) { btn.textContent = 'Route it'; btn.disabled = false; }
+}
+
+function clearPreview() {
+  pendingRoute = null;
+  layers.preview.clearLayers();
+  setRouteInfo('', false);
+  togglePreviewButtons(false);
+}
+
+async function acceptRoute() {
+  if (!pendingRoute || selectedGapIdx < 0) return;
+
+  const acceptBtn = document.querySelector('#accept-btn-row .btn-primary');
+  if (acceptBtn) { acceptBtn.textContent = 'Fetching elevation…'; acceptBtn.disabled = true; }
+
+  const gap     = gaps[selectedGapIdx];
+  const startPt = allPoints[gap.startIdx];
+  const endPt   = allPoints[gap.endIdx];
+  const profile = document.getElementById('gap-profile')?.value || 'cycling';
+
+  // Full coord list including start and end for elevation fetch
+  const allCoords = pendingRoute.coords; // [[lon, lat], ...]
+
+  // Sample down to ≤100 points for OpenTopoData (keep first + last always)
+  const sampled = sampleCoords(allCoords, 100);
+
+  // Fetch real elevations
+  let elevations = null;
+  try {
+    elevations = await fetchElevations(sampled);
+  } catch (e) {
+    setRouteInfo('Elevation fetch failed — using linear interpolation.', true);
+  }
+
+  // Build full elevation array for allCoords by interpolating from sampled
+  const eleArray = buildEleArray(allCoords, sampled, elevations, startPt.ele, endPt.ele);
+
+  // Strip OSRM start/end, keep only the middle inserted points
+  const middleCoords = allCoords.slice(1, -1);
+  const middleEles   = eleArray.slice(1, -1);
+
+  // Build segments: [startPt, ...middle, endPt] for Tobler calculation
+  const segCoords = [
+    { lat: startPt.lat, lon: startPt.lon, ele: eleArray[0] },
+    ...middleCoords.map((c, i) => ({ lat: c[1], lon: c[0], ele: middleEles[i] })),
+    { lat: endPt.lat,   lon: endPt.lon,   ele: eleArray[eleArray.length - 1] },
+  ];
+
+  // Compute per-segment durations using Tobler (hiking) or scaled cycling
+  const segDurations = computeSegmentDurations(segCoords, profile);
+  const toblerTotal = segDurations.reduce((a, b) => a + b, 0);
+
+  // Cumulative Tobler fractions (0..1) for each boundary between segCoords points
+  const cumulative = [0];
+  for (const d of segDurations) cumulative.push(cumulative[cumulative.length - 1] + d);
+
+  const startMs = startPt.time ? new Date(startPt.time).getTime() : null;
+  const endMs   = endPt.time   ? new Date(endPt.time).getTime()   : null;
+
+  // Pause at start of gap (user-editable, 0 if no timestamps or no input)
+  const pauseInput = document.getElementById('gap-pause');
+  const pauseMs = (startMs && endMs && pauseInput)
+    ? Math.max(0, parseFloat(pauseInput.value) || 0) * 60000
+    : 0;
+
+  // Travel window: full gap minus the pause
+  // If no timestamps, fall back to raw Tobler durations
+  const totalGapMs = (startMs && endMs) ? (endMs - startMs) : null;
+  // Travel window = real gap minus pause. Tobler is used only for shaping the
+  // distribution, not for the total duration, so no clamping against it.
+  const travelMs = totalGapMs !== null
+    ? Math.max(0, totalGapMs - pauseMs)
+    : toblerTotal * 1000;
+
+  // Movement starts after the pause
+  const moveStartMs = startMs ? startMs + pauseMs : null;
+
+  const newPts = middleCoords.map((c, i) => {
+    const fraction = toblerTotal > 0 ? cumulative[i + 1] / toblerTotal : (i + 1) / (middleCoords.length + 1);
+    return {
+      lat:       c[1],
+      lon:       c[0],
+      ele:       middleEles[i],
+      time:      moveStartMs ? new Date(moveStartMs + travelMs * fraction).toISOString() : null,
+      removed:   false,
+      synthetic: true,
+    };
+  });
+
+  // Show what elevation source and timing was used
+  const eleSource   = elevations ? 'SRTM elevation' : 'linear elevation';
+  const travelMins  = Math.round(travelMs / 60000);
+  const pauseMins   = Math.round(pauseMs / 60000);
+  const summary     = pauseMins > 0
+    ? `${pauseMins} min pause + ${travelMins} min travel`
+    : `${travelMins} min travel`;
+  setRouteInfo(`Accepted · ${eleSource} · ${summary}`, false);
+
+  // Insert points into allPoints
+  allPoints.splice(gap.startIdx + 1, 0, ...newPts);
+  const shift = newPts.length;
+
+  gap.endIdx += shift;
+  gap.filled = true;
+  for (let i = selectedGapIdx + 1; i < gaps.length; i++) {
+    gaps[i].startIdx += shift;
+    gaps[i].endIdx   += shift;
+  }
+  removeHistory = removeHistory.map(x => x > gap.startIdx ? x + shift : x);
+
+  cropEnd = allPoints.length - 1;
+  document.getElementById('crop-end').max   = cropEnd;
+  document.getElementById('crop-end').value = cropEnd;
+  document.getElementById('crop-start').max = allPoints.length - 1;
+
+  layers.preview.clearLayers();
+  selectedGapIdx = -1;
+  gapWaypoints = [];
+  clearWpMarkers();
+  pendingRoute = null;
+  map.getContainer().style.cursor = '';
+
+  initTrack();
+  renderPointList();
+  renderGapList();
+  renderGapHighlights();
+  drawElevChart();
+  updateStats();
+}
+
+// ── Elevation helpers ─────────────────────────────────────────────────────────
+
+// Evenly sample coords array down to maxN, always keeping first and last
+function sampleCoords(coords, maxN) {
+  if (coords.length <= maxN) return coords;
+  const result = [];
+  for (let i = 0; i < maxN; i++) {
+    const idx = Math.round(i * (coords.length - 1) / (maxN - 1));
+    result.push(coords[idx]);
+  }
+  return result;
+}
+
+async function fetchElevations(coords) {
+  // OpenTopoData SRTM 90m — free, no key, max 100 points per request
+  const locations = coords.map(c => `${c[1]},${c[0]}`).join('|');
+  const resp = await fetch(
+    `https://api.opentopodata.org/v1/srtm90m?locations=${locations}`
+  );
+  const data = await resp.json();
+  if (data.status !== 'OK') throw new Error(data.error || 'OpenTopoData error');
+  return data.results.map(r => r.elevation); // number or null for voids
+}
+
+// Given elevations for sampled coords, interpolate back to full allCoords length
+function buildEleArray(allCoords, sampled, elevations, startEle, endEle) {
+  const n = allCoords.length;
+
+  // If elevation fetch failed, fall back to linear interpolation
+  if (!elevations) {
+    return allCoords.map((_, i) => {
+      const f = i / (n - 1);
+      return (isNaN(startEle) || isNaN(endEle)) ? NaN : startEle + (endEle - startEle) * f;
+    });
+  }
+
+  // Map sampled indices back to positions in allCoords
+  const sampledPositions = sampled.map((_, si) =>
+    Math.round(si * (n - 1) / (sampled.length - 1))
+  );
+
+  // Fill any null voids with linear interpolation between neighbours
+  const cleanEles = elevations.map((e, i) => {
+    if (e !== null) return e;
+    // find nearest non-null neighbours
+    let lo = i - 1, hi = i + 1;
+    while (lo >= 0 && elevations[lo] === null) lo--;
+    while (hi < elevations.length && elevations[hi] === null) hi++;
+    const loV = lo >= 0 ? elevations[lo] : (isNaN(startEle) ? 0 : startEle);
+    const hiV = hi < elevations.length ? elevations[hi] : (isNaN(endEle) ? loV : endEle);
+    return loV + (hiV - loV) * ((i - lo) / (hi - lo));
+  });
+
+  // Interpolate to full allCoords length
+  return allCoords.map((_, i) => {
+    // Find surrounding sampled positions
+    let lo = 0, hi = sampledPositions.length - 1;
+    for (let s = 0; s < sampledPositions.length - 1; s++) {
+      if (sampledPositions[s] <= i && sampledPositions[s + 1] >= i) { lo = s; hi = s + 1; break; }
+    }
+    const loPos = sampledPositions[lo], hiPos = sampledPositions[hi];
+    if (loPos === hiPos) return cleanEles[lo];
+    const f = (i - loPos) / (hiPos - loPos);
+    return cleanEles[lo] + (cleanEles[hi] - cleanEles[lo]) * f;
+  });
+}
+
+// ── Tobler speed model ────────────────────────────────────────────────────────
+// Returns array of durations (seconds) for each segment between consecutive pts
+function computeSegmentDurations(pts, profile) {
+  const durations = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const distKm = haversine(a.lat, a.lon, b.lat, b.lon);
+    if (distKm < 1e-6) { durations.push(0); continue; }
+
+    const dEle = (isNaN(a.ele) || isNaN(b.ele)) ? 0 : (b.ele - a.ele);
+    const gradient = dEle / (distKm * 1000); // rise/run (dimensionless)
+
+    let speedKmh;
+    if (profile === 'cycling') {
+      // Cycling variant of Tobler — faster base, asymmetric gradient response
+      // Flat ~18 km/h, gentle downhill ~22, steep climb drops sharply
+      speedKmh = 18 * Math.exp(-3.0 * Math.abs(gradient + 0.02));
+      speedKmh = Math.max(3, Math.min(40, speedKmh));
+    } else {
+      // Tobler's original hiking function
+      speedKmh = 6 * Math.exp(-3.5 * Math.abs(gradient + 0.05));
+      speedKmh = Math.max(1, Math.min(10, speedKmh));
+    }
+
+    durations.push((distKm / speedKmh) * 3600);
+  }
+  return durations;
+}
+
+// ── Point list ────────────────────────────────────────────────────────────────
+function renderPointList() {
+  const list = document.getElementById('point-list');
+  list.innerHTML = '';
+  allPoints.forEach((p, i) => {
+    const inCrop = i >= cropStart && i <= cropEnd;
+    const div = document.createElement('div');
+    div.className = 'point-item' +
+      (p.removed    ? ' removed'    : '') +
+      (!inCrop      ? ' cropped-out': '') +
+      (p.synthetic  ? ' synthetic'  : '');
+    div.dataset.idx = i;
+
+    const timeStr = p.time
+      ? new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : '';
+
+    div.innerHTML = `
+      <span class="point-index">${i + 1}</span>
+      <span class="point-coords">${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</span>
+      ${timeStr ? `<span class="point-time">${timeStr}</span>` : ''}
+      <button class="remove-dot" title="${p.removed ? 'Restore' : 'Remove'}">${p.removed ? '↩' : '×'}</button>
+    `;
+
+    div.querySelector('.remove-dot').addEventListener('click', e => {
+      e.stopPropagation();
+      doToggleRemove(i);
+    });
+    div.addEventListener('click', () => { map.panTo([p.lat, p.lon]); highlightPoint(i); });
+    list.appendChild(div);
+  });
+}
+
+function updatePointListClasses() {
+  document.getElementById('point-list').querySelectorAll('.point-item').forEach(el => {
+    const i = parseInt(el.dataset.idx);
+    const p = allPoints[i];
+    const inCrop = i >= cropStart && i <= cropEnd;
+    el.classList.toggle('removed',     p.removed);
+    el.classList.toggle('cropped-out', !inCrop);
+    const btn = el.querySelector('.remove-dot');
+    btn.title = p.removed ? 'Restore' : 'Remove';
+    btn.textContent = p.removed ? '↩' : '×';
+  });
+}
+
+function scrollToPoint(idx) {
+  const el = document.getElementById('point-list').querySelector(`[data-idx="${idx}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function highlightPoint(idx) {
+  document.querySelectorAll('.point-item.highlighted').forEach(el => el.classList.remove('highlighted'));
+  const el = document.getElementById('point-list').querySelector(`[data-idx="${idx}"]`);
+  if (el) el.classList.add('highlighted');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function activePoints() {
+  return allPoints.filter((p, i) => !p.removed && i >= cropStart && i <= cropEnd);
+}
+
+function updateStats() {
+  const active = activePoints();
+  document.getElementById('stat-total').textContent = allPoints.length;
+  document.getElementById('stat-active').textContent = active.length;
+  document.getElementById('stat-dist').textContent = calcDistance(active).toFixed(1) + ' km';
+}
+
+function calcDistance(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++)
+    d += haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
+  return d;
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── Elevation chart ───────────────────────────────────────────────────────────
+function drawElevChart() {
+  const canvas = document.getElementById('elevChart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 252, H = 72;
+  canvas.width = W; canvas.height = H;
+
+  const eles = allPoints.map(p => p.ele).filter(e => !isNaN(e));
+  if (!eles.length) { ctx.clearRect(0, 0, W, H); return; }
+
+  const minE = Math.min(...eles), maxE = Math.max(...eles), range = maxE - minE || 1;
+  ctx.clearRect(0, 0, W, H);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(233,69,96,0.6)');
+  grad.addColorStop(1, 'rgba(233,69,96,0.05)');
+  ctx.fillStyle = grad;
+
+  ctx.beginPath();
+  allPoints.forEach((p, i) => {
+    const x = (i / (allPoints.length - 1)) * W;
+    const y = H - ((p.ele - minE) / range) * (H - 8) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+
+  ctx.strokeStyle = '#e94560'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  allPoints.forEach((p, i) => {
+    const x = (i / (allPoints.length - 1)) * W;
+    const y = H - ((p.ele - minE) / range) * (H - 8) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Crop overlay
+  if (cropStart > 0 || cropEnd < allPoints.length - 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const x1 = (cropStart / (allPoints.length - 1)) * W;
+    const x2 = (cropEnd   / (allPoints.length - 1)) * W;
+    ctx.fillRect(0, 0, x1, H);
+    ctx.fillRect(x2, 0, W - x2, H);
+  }
+
+  // Gap markers on chart
+  for (const gap of gaps) {
+    const x = (gap.startIdx / (allPoints.length - 1)) * W;
+    ctx.strokeStyle = gap.filled ? '#4caf50' : '#e09020';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (allPoints.length) {
+    drawElevChart();
+    if (document.getElementById('chart-panel').classList.contains('open')) drawSpeedChart();
+  }
+});
+
+// ── Timestamps ────────────────────────────────────────────────────────────────
+function initTsSection() {
+  const firstWithTime = allPoints.find(p => p.time);
+  const section = document.getElementById('ts-section');
+  if (!firstWithTime) { section.style.display = 'none'; return; }
+
+  section.style.display = '';
+
+  // Populate date picker with the activity's current date (local)
+  const d = new Date(firstWithTime.time);
+  const dateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD
+  document.getElementById('ts-date').value = dateStr;
+  updateTsHint();
+}
+
+function updateTsHint() {
+  const count = allPoints.filter(p => p.time).length;
+  document.getElementById('ts-hint').textContent =
+    `${count} point${count !== 1 ? 's' : ''} have timestamps.`;
+}
+
+function applyDateChange() {
+  const input = document.getElementById('ts-date').value; // "YYYY-MM-DD"
+  if (!input) { alert('Please pick a date.'); return; }
+
+  const [newYear, newMonth, newDay] = input.split('-').map(Number);
+
+  const shiftDate = isoStr => {
+    const d = new Date(isoStr);
+    d.setUTCFullYear(newYear);
+    d.setUTCMonth(newMonth - 1);
+    d.setUTCDate(newDay);
+    return d.toISOString();
+  };
+
+  // Update <metadata><time> in the preserved file header
+  if (gpxMeta.metadata) {
+    gpxMeta.metadata = gpxMeta.metadata.replace(
+      /<time>[^<]*<\/time>/,
+      m => `<time>${shiftDate(m.slice(6, -7))}</time>`
+    );
+  }
+
+  let changed = 0;
+  for (const p of allPoints) {
+    if (!p.time) continue;
+
+    p.time = shiftDate(p.time);
+
+    // Also update innerXml so the export round-trips correctly
+    if (p.innerXml) {
+      p.innerXml = p.innerXml.replace(
+        /<time>[^<]*<\/time>/,
+        `<time>${p.time}</time>`
+      );
+    }
+    changed++;
+  }
+
+  renderPointList();
+  updateTsHint();
+  document.getElementById('ts-hint').textContent =
+    `Updated ${changed} timestamp${changed !== 1 ? 's' : ''}.`;
+}
+
+// ── Bottom speed/pace chart ───────────────────────────────────────────────────
+let chartMetric = 'speed';
+let chartData   = [];
+let hoverMarker = null;
+
+function setChartMetric(m) {
+  chartMetric = m;
+  document.getElementById('btn-speed').classList.toggle('active', m === 'speed');
+  document.getElementById('btn-pace').classList.toggle('active',  m === 'pace');
+  buildChartData();
+  drawSpeedChart();
+}
+
+function toggleChartPanel() {
+  const panel = document.getElementById('chart-panel');
+  const btn   = document.getElementById('chart-btn');
+  const open  = panel.classList.toggle('open');
+  btn.textContent = open ? 'Chart ▼' : 'Chart ▲';
+  if (open) { buildChartData(); drawSpeedChart(); }
+  else { clearHoverMarker(); }
+  map.invalidateSize();
+}
+
+function buildChartData() {
+  const pts = allPoints.filter((p, i) => !p.removed && i >= cropStart && i <= cropEnd);
+  const SMOOTH = 5;
+  chartData = [];
+
+  const rawSpeed = [0];
+  for (let i = 1; i < pts.length; i++) {
+    const d  = haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
+    let spd  = 0;
+    if (pts[i].time && pts[i-1].time) {
+      const dt = (new Date(pts[i].time) - new Date(pts[i-1].time)) / 3600000;
+      spd = dt > 0 ? d / dt : 0;
+    }
+    rawSpeed.push(spd);
+  }
+
+  const smoothed = rawSpeed.map((_, i) => {
+    const lo = Math.max(0, i - SMOOTH), hi = Math.min(rawSpeed.length - 1, i + SMOOTH);
+    let sum = 0; for (let j = lo; j <= hi; j++) sum += rawSpeed[j];
+    return sum / (hi - lo + 1);
+  });
+
+  let cumDist = 0;
+  chartData = pts.map((p, i) => {
+    if (i > 0) cumDist += haversine(pts[i-1].lat, pts[i-1].lon, p.lat, p.lon);
+    return { distKm: cumDist, speedKmh: smoothed[i], ele: p.ele, time: p.time, lat: p.lat, lon: p.lon };
+  });
+}
+
+function drawSpeedChart() {
+  const canvas = document.getElementById('speedChart');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  if (!W || !H) return;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (!chartData.length) return;
+
+  const PAD = { top: 14, right: 16, bottom: 28, left: 48 };
+  const cW  = W - PAD.left - PAD.right;
+  const cH  = H - PAD.top  - PAD.bottom;
+
+  const maxDist = chartData[chartData.length - 1].distKm || 1;
+  const speeds  = chartData.map(d => d.speedKmh);
+  const maxSpeed = Math.max(...speeds, 1);
+
+  const validSpeeds = speeds.filter(s => s > 0.1);
+  const minPaceVal  = validSpeeds.length ? Math.min(60, 60 / Math.max(...validSpeeds)) : 5;
+  const maxPaceVal  = validSpeeds.length ? Math.max(5,  60 / Math.min(...validSpeeds, 60)) : 60;
+
+  const eles    = chartData.map(d => d.ele).filter(e => !isNaN(e));
+  const minEle  = eles.length ? Math.min(...eles) : 0;
+  const maxEle  = eles.length ? Math.max(...eles) : 1;
+  const eleRange = maxEle - minEle || 1;
+
+  const xOf = d => PAD.left + (d.distKm / maxDist) * cW;
+
+  const yOfSpeed = s => PAD.top + cH - Math.max(0, Math.min(1, s / maxSpeed)) * cH;
+  const yOfPace  = s => {
+    if (s < 0.1) return PAD.top + cH;
+    const p = 60 / s;
+    return PAD.top + Math.max(0, Math.min(1, (p - minPaceVal) / (maxPaceVal - minPaceVal))) * cH;
+  };
+  const yOf = chartMetric === 'speed' ? yOfSpeed : yOfPace;
+
+  // Elevation background
+  if (eles.length) {
+    ctx.beginPath();
+    chartData.forEach((d, i) => {
+      const x = xOf(d);
+      const y = isNaN(d.ele) ? PAD.top + cH
+        : PAD.top + cH - ((d.ele - minEle) / eleRange) * cH * 0.45;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.lineTo(xOf(chartData[chartData.length-1]), PAD.top + cH);
+    ctx.lineTo(PAD.left, PAD.top + cH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fill();
+  }
+
+  // Grid
+  ctx.strokeStyle = '#1e2f50'; ctx.lineWidth = 1;
+  const yTicks = 4;
+  for (let t = 0; t <= yTicks; t++) {
+    const y = PAD.top + (t / yTicks) * cH;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cW, y); ctx.stroke();
+  }
+
+  // Y labels
+  ctx.fillStyle = '#555'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  for (let t = 0; t <= yTicks; t++) {
+    const y = PAD.top + (t / yTicks) * cH;
+    let label;
+    if (chartMetric === 'speed') {
+      label = (maxSpeed * (1 - t / yTicks)).toFixed(1);
+    } else {
+      const pace = minPaceVal + (maxPaceVal - minPaceVal) * (t / yTicks);
+      const pm = Math.floor(pace), ps = Math.round((pace - pm) * 60);
+      label = `${pm}:${ps.toString().padStart(2,'0')}`;
+    }
+    ctx.fillText(label, PAD.left - 4, y + 3);
+  }
+
+  // X labels
+  ctx.textAlign = 'center'; ctx.fillStyle = '#555';
+  const xTickCount = Math.min(8, Math.ceil(maxDist));
+  for (let t = 0; t <= xTickCount; t++) {
+    const d = (maxDist / xTickCount) * t;
+    ctx.fillText(d.toFixed(1), PAD.left + (d / maxDist) * cW, H - 6);
+  }
+
+  // Units label
+  const unitsEl = document.getElementById('chart-units');
+  if (unitsEl) unitsEl.textContent = chartMetric === 'speed' ? 'km/h' : 'min/km';
+
+  // Speed/pace line + fill
+  ctx.beginPath();
+  chartData.forEach((d, i) => {
+    const x = xOf(d), y = yOf(d.speedKmh);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#e94560'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.stroke();
+  ctx.lineTo(xOf(chartData[chartData.length-1]), PAD.top + cH);
+  ctx.lineTo(PAD.left, PAD.top + cH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(233,69,96,0.12)';
+  ctx.fill();
+
+  // Store render params for hover
+  canvas._pad      = PAD;
+  canvas._maxDist  = maxDist;
+  canvas._maxSpeed = maxSpeed;
+  canvas._minPace  = minPaceVal;
+  canvas._maxPace  = maxPaceVal;
+  canvas._cW = cW; canvas._cH = cH;
+}
+
+// Attach hover listeners after DOM is ready
+window.addEventListener('load', () => {
+  const canvas = document.getElementById('speedChart');
+  canvas.addEventListener('mousemove', onChartHover);
+  canvas.addEventListener('mouseleave', onChartLeave);
+});
+
+function onChartHover(e) {
+  const canvas = e.currentTarget;
+  if (!canvas._pad || !chartData.length) return;
+  const PAD = canvas._pad;
+  const rect = canvas.getBoundingClientRect();
+  const mx   = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const frac = Math.max(0, Math.min(1, (mx - PAD.left) / canvas._cW));
+  const dist = frac * canvas._maxDist;
+
+  let best = 0;
+  for (let i = 1; i < chartData.length; i++) {
+    if (Math.abs(chartData[i].distKm - dist) < Math.abs(chartData[best].distKm - dist)) best = i;
+  }
+  const pt = chartData[best];
+
+  // Redraw chart then overlay crosshair + dot
+  drawSpeedChart();
+  const ctx = canvas.getContext('2d');
+  const cH  = canvas._cH;
+  const x   = PAD.left + (pt.distKm / canvas._maxDist) * canvas._cW;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top + cH); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const yOf = chartMetric === 'speed'
+    ? PAD.top + cH - Math.max(0, Math.min(1, pt.speedKmh / canvas._maxSpeed)) * cH
+    : (() => {
+        if (pt.speedKmh < 0.1) return PAD.top + cH;
+        const p = 60 / pt.speedKmh;
+        return PAD.top + Math.max(0, Math.min(1, (p - canvas._minPace) / (canvas._maxPace - canvas._minPace))) * cH;
+      })();
+
+  ctx.beginPath();
+  ctx.arc(x, yOf, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#e94560'; ctx.fill();
+  ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Tooltip values
+  const tip = document.getElementById('chart-tooltip');
+  tip.classList.add('visible');
+  document.getElementById('tt-dist').textContent = pt.distKm.toFixed(2) + ' km';
+
+  const lbl = document.getElementById('tt-speed-lbl');
+  if (chartMetric === 'speed') {
+    lbl.textContent = 'speed ';
+    document.getElementById('tt-speed').textContent = pt.speedKmh.toFixed(1) + ' km/h';
+  } else {
+    lbl.textContent = 'pace ';
+    const pace = pt.speedKmh > 0.1 ? 60 / pt.speedKmh : null;
+    if (pace) {
+      const pm = Math.floor(pace), ps = Math.round((pace - pm) * 60);
+      document.getElementById('tt-speed').textContent = `${pm}:${ps.toString().padStart(2,'0')} /km`;
+    } else {
+      document.getElementById('tt-speed').textContent = '—';
+    }
+  }
+  document.getElementById('tt-ele').textContent  = isNaN(pt.ele) ? '—' : Math.round(pt.ele) + ' m';
+  document.getElementById('tt-time').textContent = pt.time
+    ? new Date(pt.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '—';
+
+  // Marker on map
+  clearHoverMarker();
+  hoverMarker = L.circleMarker([pt.lat, pt.lon], {
+    radius: 7, color: 'white', fillColor: '#e94560', fillOpacity: 1, weight: 2,
+  }).addTo(map);
+}
+
+function onChartLeave() {
+  document.getElementById('chart-tooltip').classList.remove('visible');
+  clearHoverMarker();
+  drawSpeedChart();
+}
+
+function clearHoverMarker() {
+  if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function exportGpx() {
+  const pts = allPoints.filter((p, i) => !p.removed && i >= cropStart && i <= cropEnd);
+  if (!pts.length) { alert('No active points to export.'); return; }
+
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
+
+  // Reconstruct <gpx> opening tag with original namespaces
+  const ns = gpxMeta.namespaces
+    ? gpxMeta.namespaces
+    : 'xmlns="http://www.topografix.com/GPX/1/1"';
+  lines.push(`<gpx version="1.1" creator="GPX Toolbox" ${ns}>`);
+
+  // Preserve original <metadata> block if present
+  if (gpxMeta.metadata) lines.push('  ' + gpxMeta.metadata);
+
+  // <trk> with original name, type, and any extra children
+  lines.push('  <trk>');
+  if (gpxMeta.trkName) lines.push(`    <name>${escXml(gpxMeta.trkName)}</name>`);
+  if (gpxMeta.trkType) lines.push(`    <type>${escXml(gpxMeta.trkType)}</type>`);
+  if (gpxMeta.trkExtras) lines.push(gpxMeta.trkExtras);
+  lines.push('    <trkseg>');
+
+  for (const p of pts) {
+    if (p.synthetic) {
+      // Synthetic points: just ele + time, no fake HR/cadence
+      let tag = `      <trkpt lat="${p.lat}" lon="${p.lon}">`;
+      if (!isNaN(p.ele)) tag += `<ele>${p.ele.toFixed(1)}</ele>`;
+      if (p.time)        tag += `<time>${p.time}</time>`;
+      tag += '</trkpt>';
+      lines.push(tag);
+    } else {
+      // Real points: emit original inner XML verbatim — preserves
+      // ele, time, hdop, sat, fix, extensions (HR, cadence, power, etc.)
+      lines.push(`      <trkpt lat="${p.lat}" lon="${p.lon}">${p.innerXml}</trkpt>`);
+    }
+  }
+
+  lines.push('    </trkseg>', '  </trk>', '</gpx>');
+
+  const blob = new Blob([lines.join('\n')], { type: 'application/gpx+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'edited-track.gpx';
+  a.click();
+}
+
+function escXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+</script>
+</body>
+</html>
