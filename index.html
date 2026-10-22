@@ -379,6 +379,22 @@
           <button class="btn btn-danger" id="undo-btn" onclick="undoLast()" disabled>Undo Last</button>
         </div>
       </div>
+
+      <!-- Simplify -->
+      <div class="sidebar-section">
+        <h2>Simplify Track</h2>
+        <div class="range-group">
+          <div class="range-row">
+            <label>Tolerance</label>
+            <input type="range" id="simplify-tol" min="1" max="50" value="10" oninput="updateSimplifyLabel()" />
+            <span class="val" id="simplify-tol-val">10 m</span>
+          </div>
+        </div>
+        <p class="hint" id="simplify-hint">Removes points within this distance of the straight line between kept points.</p>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="simplifyTrack()">Simplify</button>
+        </div>
+      </div>
     </div>
 
     <!-- Point list -->
@@ -421,10 +437,10 @@ let gapWpMarkers = [];  // Leaflet markers for waypoints
 let pendingRoute = null; // {coords[[lon,lat]], duration, distance} from OSRM
 
 // ── Map + layer ordering ─────────────────────────────────────────────────────
-const map = L.map('map', { zoomControl: true }).setView([20, 0], 2);
+const map = L.map('map', { zoomControl: true }).setView([51.505, -0.09], 13);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   maxZoom: 19,
 }).addTo(map);
 
@@ -1393,6 +1409,83 @@ function highlightPoint(idx) {
   document.querySelectorAll('.point-item.highlighted').forEach(el => el.classList.remove('highlighted'));
   const el = document.getElementById('point-list').querySelector(`[data-idx="${idx}"]`);
   if (el) el.classList.add('highlighted');
+}
+
+// ── Simplify (Douglas-Peucker) ────────────────────────────────────────────────
+function updateSimplifyLabel() {
+  const v = document.getElementById('simplify-tol').value;
+  document.getElementById('simplify-tol-val').textContent = v + ' m';
+}
+
+// Perpendicular distance (meters) from point p to the line segment a→b,
+// using a flat-earth approximation (fine for distances < ~1 km).
+function perpDistM(p, a, b) {
+  const R = 6371000;
+  const latR = ((p.lat + a.lat + b.lat) / 3) * Math.PI / 180;
+  const cosl = Math.cos(latR);
+
+  const px = (p.lon - a.lon) * cosl * R * Math.PI / 180;
+  const py = (p.lat - a.lat)           * R * Math.PI / 180;
+  const ex = (b.lon - a.lon) * cosl * R * Math.PI / 180;
+  const ey = (b.lat - a.lat)           * R * Math.PI / 180;
+
+  const len2 = ex * ex + ey * ey;
+  if (len2 === 0) return Math.sqrt(px * px + py * py);
+  const t  = Math.max(0, Math.min(1, (px * ex + py * ey) / len2));
+  const dx = px - t * ex, dy = py - t * ey;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Returns indices (into `pts` array) that Douglas-Peucker keeps.
+function dpIndices(pts, tolM) {
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [lo, hi] = stack.pop();
+    if (hi - lo < 2) continue;
+    let maxD = 0, maxI = lo;
+    for (let i = lo + 1; i < hi; i++) {
+      const d = perpDistM(pts[i], pts[lo], pts[hi]);
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > tolM) {
+      keep[maxI] = 1;
+      stack.push([lo, maxI], [maxI, hi]);
+    }
+  }
+  return keep;
+}
+
+function simplifyTrack() {
+  const tolM = parseFloat(document.getElementById('simplify-tol').value);
+
+  // Operate only on active (non-removed, in-crop) points, preserving their allPoints indices.
+  const active = allPoints
+    .map((p, i) => ({ ...p, _i: i }))
+    .filter((p, i) => !p.removed && i >= cropStart && i <= cropEnd);
+
+  if (active.length < 3) return;
+
+  const keep = dpIndices(active, tolM);
+  let removed = 0;
+  for (let j = 0; j < active.length; j++) {
+    if (!keep[j]) {
+      allPoints[active[j]._i].removed = true;
+      removeHistory.push(active[j]._i);
+      removed++;
+    }
+  }
+
+  const kept = active.length - removed;
+  document.getElementById('simplify-hint').textContent =
+    `Kept ${kept} of ${active.length} points (removed ${removed}). Use Undo to revert.`;
+
+  updateMapStyles();
+  updatePointListClasses();
+  updateStats();
+  updateRemovedBadge();
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────

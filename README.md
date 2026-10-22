@@ -46,6 +46,14 @@ A typical workflow for two activities recorded on the same outing:
 4. Fill the junction gap if desired
 5. Export the merged result
 
+### Simplify track
+
+Removes GPS noise that inflates recorded distance. Phone GPS recorded at 1 Hz typically adds 15–25% extra distance from random positional error; simplification brings the figure back to the real distance.
+
+Click **Simplify** in the sidebar to run the [Douglas-Peucker algorithm](https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm) on the active track. The **Tolerance** slider (1–50 m, default 10 m) controls how aggressively points are removed: a point is dropped if it lies within that distance of the straight line between its two neighbours. Higher values produce a smoother, shorter track; lower values preserve more detail.
+
+Simplified points are marked as removed and excluded from export. The operation is fully undoable via **Undo Last**.
+
 ### Edit timestamps
 If your file has timestamps, a **Timestamps** section lets you change the date on all points at once (e.g. if the device had the wrong date set). Time-of-day and the relative spacing between points are preserved. This is useful before stitching if the two files were recorded on different calendar dates.
 
